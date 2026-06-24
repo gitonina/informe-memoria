@@ -1,8 +1,47 @@
 #import "final.typ": conf, resumen, dedicatoria, agradecimientos, start-doc, end-doc, capitulo, apendice
+
 #import "metadata.typ": example-metadata
 
 #show: conf.with(metadata: example-metadata)
+#import "@preview/ctheorems:1.1.3": *
+#show: thmrules.with(qed-symbol: $square$)
+#set heading(numbering: "1.1.")
 
+#let theorema = thmbox("teorema", "Teorema")
+
+#let corollary = thmplain(
+  "corollary",
+  "Corollary",
+  base: "teorema",
+  titlefmt: strong
+)
+#let definition = thmbox("definition", "Definition", inset: (x: 1.2em, top: 1em))
+
+#let example = thmplain("example", "Example").with(numbering: none)
+#let proof = thmproof("proof", "Proof")
+#let property = thmenv(
+  "propiedad",
+  "heading",
+  none,
+  (name, number, body, color: black) => {
+    let title = [*Propiedad #number:*]
+    
+    block(
+      stroke: (left: 1.5pt + black),
+      inset: (left: 0.75em, top: 0.4em, bottom: 0.4em),
+      width: 100%,
+      fill: luma(235),
+      if body == [] {
+        block(width: 100%)[
+          #align(center, name)
+          #place(left + horizon, title)
+        ]
+      } else {
+        [#title #name \ #body]
+      }
+    )
+  }
+)
 #resumen(metadata: example-metadata)[
 
  El siguiente documento aborda la construcción y experimentación de un indice basado en la compresión del arreglo diferencial de sufijos DSA mediante Repair, utilizando metadata en los nodos no-terminales y terminales, de forma que dado un intervalo [sp,ep] en el arreglo de sufijos SA, encontrar min(SA[sp..ep]) (la ocurrencia más a la izquierda del texto) y max(SA[sp..ep]) (la ocurrencia más a la derecha en el texto), sin tener que leer todas las ep - sp +1 posiciones del SA.
@@ -111,10 +150,34 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
    == Run-Length FM-index
 
    El FM-index es un indice comprimido que permite buscar patrones en T sin alamacenar T explicitamente, y se basa en en la BWT. El Run-Length FM-index es una variante del F-index, diseñada para textos repetitivos. Usa el hecho de que la BWT de un texto repetitivo tiene pocas runs: alcmacena la BWT de forma compacta representando cada run por su carácter y su longitud. 
-
+   #pagebreak()
    == Arreglo diferencial de sufijos DSA
+
+   El Arreglo diferencial de sufijos se define de la siguiente manera: 
+
+    DAS[1] = SA[1]
+
+    DSA[p] = SA[p] - SA[p-1] para todo p$\geq$2
+
+    Es decir, DSA almacena las diferencias entre valores consecutivos del arreglo de sufijos. Los valores del SA son enteros con signo, que pueden ser positivos o negativos.
+
+    El arreglo de sufijos original que puede reconstruir a partir del DSA mediante sumas parciales: para cualquier posición de referencia q$<$p:
+     
+     #block(
+        stroke: (left: black),
+        inset: (top:0.5em, bottom:0.5em,),
+
+     )[
+       #property($ S A [p]= S A [q] + sum_(j=q+1)^p D S A[j]  $)[]
+
+     ]
+   
    
    == Compresión gramatical Repair
+
+   Repair es un algoritmo de compresión gramatical que transforma una secuencia de símbolos en una gramática libre de contexto que genera unicamente esa secuencia. Funciona iterativamente: en cada paso identifica el par de simbolos adyacentes que aparece con mayor frecuencia en la secuencia actual, crea un nuevo no-terminal que lo representa, reemplaza todas las ocurrencias de ese par por el nuevo no-terminal, y repite hasta que no quede ningún par con frecuencia mayor que uno. El resultado es un conjunto de reglas donde cada regla tiene exactamente dos símbolos en el lado derecho (X -$>$ $Y_{1}Y_{2}$), mas una secuencia comprimida (la regla del símbolo inicial) que contiene los símbolos que no fueron reemplazados.
+
+    En el contexto de este trabajo, RePair se aplica sobre el arreglo diferencial de sufijos DSA. La repetitividad del DSA  hace que muchos pares de valores adyacentes se repitan a lo largo de la secuencia, lo que permite a RePair capturarlos jerárquicamente: primero los pares más frecuentes de valores originales, luego pares de no-terminales que representan patrones cada vez más largos. La gramática resultante tiene un tamaño dramáticamente menor que la secuencia original para colecciones genómicas repetitivas, y su estructura de árbol binario (cada no-terminal tiene exactamente dos hijos) permite almacenar metadata agregada en cada nodo y responder consultas por descenso recursivo sin descomprimir.
    
    == RMQ, PSV y NSV
     #figure(
