@@ -39,7 +39,24 @@
   }
 )
 
-#let example = thmplain("example", "Example").with(numbering: none)
+
+#let algorithm(titulo, cuerpo) = {
+  block(
+    stroke: (left: 1.5pt + black, bottom: none, top: none, right: none),
+    inset: (left: 0.75em, top: 0.4em, bottom: 0.4em),
+    width: 100%,
+    [*#titulo* \ #cuerpo]
+  )
+}
+
+#set list(marker: ([▪], [•]))
+
+#let paso(titulo, cuerpo) = {
+  list(
+    [#emph(strong(titulo)) #linebreak() #cuerpo]
+  )
+}
+
 #let proof = thmproof("proof", "Proof")
 #let property = thmenv(
   "propiedad",
@@ -74,6 +91,27 @@
       [*Metadata #number.*]
     } else {
       [*Metadata #number.* (#name)]
+    }
+    
+    block(
+      stroke: 0.8pt + black,
+      inset: (x: 1em, y: 0.75em),
+      width: 100%,
+      radius: 0pt,
+      [#title #body]
+    )
+  }
+)
+
+#let structure = thmenv(
+  "estructura",
+  "heading",
+  none,
+  (name, number, body, color: black) => {
+    let title = if name == [] or name == "" {
+      [*Estructura #number.*]
+    } else {
+      [*Estructura #number.* (#name)]
     }
     
     block(
@@ -543,7 +581,7 @@ $ P S(k) = sum_(j=1)^(l(Y_1)) D S A[j] + sum_(j=1)^(l(Y_2)) D S A[j]  $
 Por las definiciones hechas, el minimo del primer grupo es $m_min$($Y_1$). Para el segundo
 grupo, corresponde a las ultimas l($Y_2$) sumas parciales. Dado que k>l($Y_1$):
 
-$P S(l(Y_1)+j)=d(Y_1)+P S_(Y_2)(j), quad p a r a quad 1<=j<=l(Y_2)$
+$ P S(l(Y_1)+j)=d(Y_1)+P S_(Y_2)(j), quad p a r a quad 1<=j<=l(Y_2) $
 
 Donde $P S_(Y_2)(j)$ denota las sumas parciales de la expansión de $Y_2$. Esto se cumple
 porque la suma parcial en la posición l($Y_1$)+j incluye toda la expansión de $Y_1$ (cuya suma es d($Y_1$))
@@ -555,11 +593,165 @@ $ m_(min)(X)=min(m_(min)(Y_1), d(Y_1)+m_(min)(Y_2)) $
 
 *Posición del mínimo*: Si $m_(min)(Y_1)<= d(Y_1)+m_(min)(Y_2)$, entonces el mínimo global
 esta en el grupo 1, y su posición relativa dentro de X es la misma que dentro de $Y_1$:
+    
+    $ p_(min)(X) =  p_(min)(Y_1) $
+    En caso contrario, entonces el mínimo global esta en el segundo grupo, y su posición
+relativa dentro de X es la posición de Y2 mas el largo de Y1:
+
+$ p_(min)(X)=l(Y_1)+p_(min)(Y_2) $
+
+En caso de igualdad, se elige la posición más a las izquierda que esta en el primer grupo.
+
+*Máximo de sumas parciales*: El razonamiento es totalmente simétrico al mínimo: 
+
+$ m_(max)(X)=max(m_(max)(Y_1), d(Y_1)+m_(max)(Y_2)) $
+
+*Posición del máximo*: Si $m_(min)(Y_1)>=d(Y_1)+m_(min)(Y_2)$, el máximo global 
+esta en el primer grupo, y su posición relativa en X es la misma que dentro de 
+$Y_1$:
+
+$ p_(max)(X)=p_(max)(Y_1) $
+
+En caso contrario (analogo al mínimo):
+
+$ p_(max)(X)=l(Y_1)+p_(max)(Y_2) $
     == Complejidad del calculo de la metadata 
-
+      Para cada regla X-> $Y_1Y_2$, el calculo de los 6 campos de metadata toma O(1) en tiempo
+dado que solo son comparaciones y sumas. Si la gramática tiene g reglas, el tiempo total es
+O(G). En cuanto espacio, si la gramática tiene g no-terminales, el espacio total de la metadata
+es O(g). Los terminales también tienen metadata, pero es trivial y se pueden calcular en el
+camino, así que no requieren almacenamiento adicional.
     == Estructuras auxiliares
+    
+    Lo siguiente es una adaptación de lo que se hace en jacm19 en la seccion 6.3 para el
+    DLCP. La gramatica del DLCP tiene una regla inicial:
+    
+    $ S->X_1X_2... $
+    Se construyen arrays auxiliares sobre esta secuencia para poder localizar rápidamente en
+que símbolo $X_x$ cae una posición dada, y para resolver la parte central de una consulta RMQ
+en O(1). Especificamente, en jacm19 se define:
 
+     - L[x]: longituds acumuladas (para localizar posiciones)
+     - A[x]: diferencias acumuladas (para convertir entre valores relativos y absolutos)
+     - M[x]: mínimos por símbolo (para resolver parte central de RMQ)
+     - $R M Q_M$: Estructura RMQ sucinta sobre M (para consultas o(1))
+
+     Estas mismas ideas se aplican al DSA en vez del DLCP, y se duplican para manejar tanto
+     mínimos como máximos.
+
+     La regla del símbolo inicial de la gramática Repair es de la forma:
+
+     $ S->s_1s_2s_3... $
+
+     Esta secuencia se denotará por $D S A_0$. Cada simbolo $s_x$ es un terminal o un no-terminal y expande a un bloque contiguo del DSA. Cuando llega una consulta RangeMin(SA[ep..sp]), lo primero que se necesita saber es en qué simbolos de $D S A_0$ caen las posiciones sp y ep. Y para la parte central de la consulta (los símbolos completos entre sp y ep), se necesita encontrar rápidamente cual tiene el menor / mayor valor del SA. Las estructuras auxiliares resuelven estos problemas. Las siguientes definiciones son sacadas directamente desde jacm19, adaptadas para el arreglo DSA:
+
+     #structure("Longitudes acumuladas L[x]")[ Dado K=|$D S A_0$|: 
+   $ L[0]=0 $
+   $ L[x]=L[x-1] + l(s_x), quad  p a r a quad 0<=x<=K  $
+]
+L[x] es la posición del DSA hasta donde llega la expansión de $s_x$. La expansión de $s_x$ cubre las posiciones DSA[L[x-1]+1..L[x]]. Para encontrar en qué simbolo $s_x$ cae la posición DSA[p], hacemos una búsqueda binaria sobre L para encontrar el x tal que L[x-1]$<$p$<=$L[x], lo cual toma o(log(|$D S A_0$|)).
+
+#structure("Diferencias acumuladas A[x]")[ Dado K=|$D S A_0$|: 
+   $ A[0]=0 $
+   $ A[x]=A[x-1] + d(s_x), quad  p a r a quad 0<=x<=K  $
+]
+Recordando que $d(s_x)$ es la suma de los valores del DSA en la expansión de $s_x$, como el
+DSA son diferencias del SA, la suma acumulada da las diferencias del SA entre posiciones
+mas lejanas:
+
+$ A[x]=d(s_1)+d(s_2)+...+d(s_x)=D S A[1]+D S A[2]+...+D S A[L[x]]= S A[L[x]]-S A[0] $
+#pagebreak()
+Si se define SA[0]=0, entonces A[x]=SA[L[x]]. Esto sirve cuando se requiera saber SA[L[x-1]](el valor del SA justo al final de la expansión del símbolo x-1, que es el punto de referencia para el símbolo x). Mas precisamente, en el algoritmo de consulta que se verá mas adelante, A[x-1] es es el valor base f a partir del cual los valores relativos $m_min$ y $m_max$ del símbolo $s_x$ se convierten en valores absolutos del SA, es decir: 
+
+$ E l quad m í n i m o  quad a b s o l u t o quad d e l quad S A quad d e n t r o quad d e quad l a quad e x p a n s i ó n quad d e quad s_x quad e s: A[x-1]+m_(min)(s_x) $
+$ E l quad m á x i m o  quad a b s o l u t o quad d e l quad S A quad d e n t r o quad d e quad l a quad e x p a n s i ó n quad d e quad s_x quad e s: A[x-1]+m_(max)(s_x) $
+
+#structure($M_"min"$)[ Dado K=|$D S A_0$|: 
+   $ M_(min)[x]=A[x-1]+m_(min)(s_x),quad p a r a quad 1<=x<=K $
+]
+
+En jacm19 se define un solo array M para los mínimos, en este caso se necesitan dos, uno para los mínimos y otro para los máximos. $M_min$ es el valor mínimo absoluto del SA dentro de la expansión de $s_x$.
+
+#structure($M_"max"$)[ Dado K=|$D S A_0$|: 
+   $ M_(max)[x]=A[x-1]+m_(max)(s_x),quad p a r a quad 1<=x<=K $
+]
+$M_max$ es el valor máximo absoluto del SA dentro de la expansión de $s_x$
+
+Estas estructuras son necesarias pues queremos comparar mínimos y máximos entre distintos valores del $D S A_0$. Cada símbolo tiene un punto de referencia distinto (A[x-1]), y la metadata $m_min$ y $m_max$ es relativa a ese punto de referencia. Para poder comparar es necesario convertir a valores absolutos.
+
+#structure($"R M Q"_M_min$)[ Dado un rango [x..y], devuelve en o(1) la posición z $in$ [x..y] tal que $M_min$[z] es mínimo.
+  ]
+  
+#structure($"R M Q"_M_max$)[ Dado un rango [x..y], devuelve en o(1) la posición z $in$ [x..y] tal que $M_max$[z] es máximo.
+  ]
+
+  En jacm19, la estructura realizada por Ficher y Heun resuelve RMQ en o(1) usando solo o(r) bits, sin almacenar el array M explícitamente. Aquí se toma esta idea pero almacenando $M_min$ y $M_max$ (que son solo o(|$D S A_0$|)). Estas estructuras sirven para cuando la consulta RangeMin(SA[sp..ep]) tiene una parte central que abarca los simbolos $D S A_0$[x+1..y-1], se necesita encontrar cual de estos símbolos tiene el menor $M_min$. El espacio total de las estructuras auxiliares es O(|$D S A _0$|), que es proporcional al número
+de símbolos en la secuencia comprimida. Como |$D S A_0$|$<=$g (el tamaño de la gramática) $<=$
+n, y para textos repetitivos g$<<$ n.
     == Algoritmo de consulta
+    El algoritmo siguiente es una adaptación del procedimiento de RMQ sobre la gramática del DLCP descrito en Jacm19. Jacm19 describe como resolver RMQ(p,q) sobre el LCP descomponiendo el rango en tres partes, y descendiendo por la gramática para las partes parciales. Se hará exactamente lo mismo pero sobre el DSA para obtener RangeMin y RangeMax sobre el SA. La estructura general es: 
+
+    + Descomponer el rango [sp,ep] en 3 partes respecto a la secuencia $D S A_0$.
+    + Resolver la parte central en o(1) con $R M Q_(M_min)$ y $R M Q_(M_max)$.
+    + Resolver las partes laterales descendiendo por la gramática.
+    + Combinar los 3 resultados.
+    
+    El input del algoritmo es un intervalo [sp..ep] del SA, donde 1$<=$sp$<=$ep$<=$n. Ese intervalo viene de backward search de la BWT: cuando se busca un MEM en el FM-index, se obtiene el rango de posiciones del SA donde aparecen las ocurrencias de ese MEM. El output sería finalmente min(SA[sp],SA[sp+1],...,SA[ep]) y max(SA[sp],SA[sp+1],...,SA[ep]) junto con sus posiciones. Con estos dos valores y el bitvector B, se obtiene:
+
+    $ f i r s t-g e n o m e= B.r a n k(min(S A[s p],S A[s p+1],...,S A[e p])) $ 
+    $ l a s t-g e n o m e= B.r a n k(max(S A[s p],S A[s p+1],...,S A[e p])) $ 
+
+    Luego, LCA(firt-genome,last-genome) entrega la clasificación.
+    #pagebreak()
+    #algorithm[Algoritmo de consulta][
+  #paso[Paso 1: Localizar los símbolos extremos][
+  Hacemos dos búsquedas binarias sobre el array L para encontrar: 
+
+    - x: el indice del símbolo de $D S A_0$ que contiene la posición sp. Es decir, el x tal que L[x-1]$<$sp$<=$L[x].
+
+    - y: el indice del simbolo de $D S A_0$ que contiene la posición sp. Es decir, el y tal que L[y-1]$<$ep$<=$L[y].
+  ]
+
+  #paso[Paso 2: Descomponer en 3 partes][
+    + Parte derecha del símbolo $s_x$: DSA[sp...L[x]]
+
+    + Parte central: DSA[L[x]+1...L[y-1]]
+
+    + Parte izquierda del símbolo $s_y$: DSA[L[y-1]+1...ep]
+
+    *Casos especiales*
+    - x=y: Las posiciones sp y ep caen dentro del mismo símbolo. No hay parte central, y las partes 1 y 3 se fusionan en una sola consulta parcial dentro de $s_x$
+    - x+1=y: No hay símbolos completos entres $s_x$ y $s_y$. La parte 2 está vacía. Solo hay partes 1 y 3
+    - sp= L[x-1]+1: sp empieza justo al inicio de $s_x$, entonces la parte 1 cubre toda la expansión de $s_x$ y no se necesita descender, se puede usar $M_min$ y $M_max$ directamente. 
+    - ep= L[y]: ep llega justo al final de $s_y$, entonces la parte 3 cubre toda la expansión de $s_y$ y se puede usar $M_min$
+     y $M_max$
+
+  ]
+  #paso[Paso 3: Resolver la parte central][
+    Dado un no-terminal X con expansión D=DSA[p..q] de largo l(X), y un subrango [a..b] con 1$<=$a$<=$b$<=$l(X), se debe encontrar mínimo y máximo de las sumas parciales de D[a..b]
+
+    *Caso base(X es terminal)*: Si X es un terminal con valor v, entonces l(X)=1 y por lo tanto, a=b=1: min=v, max=v, posición=1.
+
+    *Caso recursivo: $X->Y_1Y_2$*: Hay 3 subcasos donde caen a y b con respecto a l($Y_1$):
+
+                                - *Subcaso A ($b<=l(Y_1))$*: Todo el rango esta dentro de $Y_1$. Descendemos recursivamente en $Y_1$ con el mismo rango [a..b]
+  ]
+]
+#pagebreak()
+ #algorithm[][
+  - *Subcaso B  ($a>l(Y_1))$*: Todo el rango esta dentro de $Y_2$. Descendemos recursivamente en $Y_2$ con rango [a-l($Y_1$),b-l($Y_1$)]
+  - *Subcaso C ($a<=l(Y_1)<b)$*: Este es el caso mas interesante, se requiere:
+       + El min/max de sumas parciales de $Y_1$[a..l($Y_1$)] (cola derecha de $Y_1$)
+       + El min/max de sumas parciales de $Y_2[1..b-l(Y_1)]$ (cola izquierda de $Y_2$)
+       + Combinar ambos resultados
+  Para el punto 1, se desciende recursivamente en $Y_1$ con rango [a,l($Y_1$)].Para el punto 2, se desciende recursivamente en $Y_2$ con rango [1,b-l($Y_1$)] con acumulador $f_2$=f+(suma de D[a..l($Y_1$)]).
+
+Esa suma es el resultado del descenso en $Y_1$, especificamente, es d de la sub-consulta en $Y_1$ (la suma total de las sumas parciales en $Y_1[a..l(Y_1)]$). Cuando se desciende en $Y_1$, además de de obtener el min y max, también se obtiene la suma total del sub-rango, que es el valor de la última suma parcial. 
+
+Formalizando:
+
+$ ( min_L,max_L, s u m_L ) $ 
+ ]
 
     == Ejemplo completo  
 
