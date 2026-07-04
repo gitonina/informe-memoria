@@ -39,13 +39,26 @@
   }
 )
 
+#let desarrollo(cuerpo) = block(
+  stroke: 0.8pt + luma(80%),
+  inset: (left: 0.75em, top: 0.6em, bottom: 0.6em, right: 0.75em),
+  width: 100%,
+  fill: white,
+  radius: 4pt,
+  cuerpo
+)
+
 
 #let algorithm(titulo, cuerpo) = {
   block(
     stroke: (left: 1.5pt + black, bottom: none, top: none, right: none),
     inset: (left: 0.75em, top: 0.4em, bottom: 0.4em),
     width: 100%,
-    [*#titulo* \ #cuerpo]
+    if titulo == [] or titulo == "" {
+      cuerpo
+    } else {
+      [*#titulo* \ #cuerpo]
+    }
   )
 }
 
@@ -750,24 +763,377 @@ Esa suma es el resultado del descenso en $Y_1$, especificamente, es d de la sub-
 
 Formalizando:
 
-$ ( min_L,max_L, s u m_L ) $ 
+$ ( m i n_L,m a x_L, s u m_L, p o s_min_L,p o s_max_L )= d e s c e n s o(Y_1,a,l(Y_1),f) $
+Donde $s u m_L$ es la suma DSA[p+a-1] +...+DSA[p+l($Y_1$)-1], que equivale a
+la suma parcial final del sub-rango en $Y_1$, luego:
+
+$ f_2= f+s u m_L $
+$ ( m i n_R,m a x_R, s u m_R, p o s_(m i n)_R,p o s_(m a x)_R )= d e s c e n s o(Y_2,1,b-l(Y_1),f_2) $
+Combinando:
+$ r e s u l t_(m i n)=m i n(m i n_L,m i n_R) $
+$ r e s u l t_(m a x)= m a x(m a x_L,m a x_R) $
+La suma del subrango $Y_1$[a..l($Y_1$)] se puede calcular durante el descenso.
+Cuando se llega a un nodo completo que esta dentro del rango, su suma es d(X). Cuando
+se parte un nodo, se acumulan las sumas de las partes que se cubren completamente. Si el subrango
+cubre toda la cola derecha de $Y_1$ desde la posición a hasta l($Y_1$), la suma es:
+$s u m_L=d(Y_1)-P S^(a-1)_(Y_1)$, donde $P S^(a-1)_(Y_1)$ es la suma parcial de $Y_1$
+hasta la posición a-1. En la practica , se va acumulando las sumas de los nodos que se saltan,
+y al final, $s u m_L$ se obtiene como d($Y_1$) menos esa acumulación. 
  ]
 
     == Ejemplo completo  
+    A continuación se presentará un ejemplo de como funciona este indice aplicado al DSA:
 
-    == Integración con el pipeline
+    Dado el siguiente texto: T= A T G C A $\$$ A T G C G $\$$ C T G C A $\$$
     
+    Se tienen los siguientes genomas:
+
+    - Genoma 0: A T G C A
+    - Genoma 1: A T G C G 
+    - Genoma 2: C T G C A
+
+    === Suffix Array SA
+    Teniendo en cuenta que ordenados de forma lexicográfica se cumple que $\$$$<$A$<$C$<$G$<$T, dada la tabla @tab:sufijos, el Suffix Array es SA = [18,6,12,17,5,1,7,16,4,10,13,11,15,3,9,14,2,8].
+
+    #figure(
+  table(
+    columns: 4,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 4)[*Sufijos del texto T*],
+    table.hline(),
+    [*i*], [*SA[i]*], [*Sufijo*], [*Grupo*],
+    table.hline(),
+    [1],  [18], [$dollar$],                              [$dollar$],
+    [2],  [6],  [$dollar$ATGCG$dollar$CTGCA$dollar$],   [$dollar$],
+    [3],  [12], [$dollar$CTGCA$dollar$],                 [$dollar$],
+    [4],  [17], [A$dollar$],                             [A],
+    [5],  [5],  [A$dollar$ATGCG$dollar$CTGCA$dollar$],  [A],
+    [6],  [1],  [ATGCA$dollar$ATGCG$dollar$...],         [A],
+    [7],  [7],  [ATGCG$dollar$CTGCA$dollar$],            [A],
+    [8],  [16], [CA$dollar$],                            [C],
+    [9],  [4],  [CA$dollar$ATGCG$dollar$...],            [C],
+    [10], [10], [CG$dollar$CTGCA$dollar$],               [C],
+    [11], [13], [CTGCA$dollar$],                         [C],
+    [12], [11], [G$dollar$CTGCA$dollar$],                [G],
+    [13], [15], [GCA$dollar$],                           [G],
+    [14], [3],  [GCA$dollar$ATGCG$dollar$...],           [G],
+    [15], [9],  [GCG$dollar$CTGCA$dollar$],              [G],
+    [16], [14], [TGCA$dollar$],                          [T],
+    [17], [2],  [TGCA$dollar$ATGCG$dollar$...],          [T],
+    [18], [8],  [TGCG$dollar$CTGCA$dollar$],             [T],
+    table.hline(),
+  ),
+  caption: [Sufijos del texto T],
+) <tab:sufijos>
+=== Differential Suffix Array
+
+#figure(
+  table(
+    columns: 4,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 4)[*Differential Suffix Array DSA*],
+    table.hline(),
+    [*p*], [*SA[p]*], [*SA[p-1]*], [*DSA[p]*],
+    table.hline(),
+    [1],  [18], [-],  [18],
+    [2],  [6],  [18], [-12],
+    [3],  [12], [6],  [6],
+    [4],  [17], [17], [5],
+    [5],  [5],  [5],  [-12],
+    [6],  [1],  [5],  [-4],
+    [7],  [7],  [1],  [6],
+    [8],  [16], [16], [C],
+    [9],  [10], [4],  [C],
+    [10], [13], [10], [C],
+    [11], [11], [13], [G],
+    [12], [15], [11], [G],
+    [13], [3],  [15], [G],
+    [14], [9],  [3],  [G],
+    [15], [14], [9],  [T],
+    [16], [2],  [14], [T],
+    [17], [8],  [2],  [T],
+    [18], [8],  [2],  [T],
+    table.hline(),
+  ),
+  caption: [Differential Suffix Array DSA ],
+) <tab:diferential>
+Dado el SA, se calcula el DSA. De acuerdo a @tab:diferential se tiene que DSA= [18, -12, 6, 5, -12, -4, 6, 9, -12, 6, 3, -2, 4, -12, 6, 5, -12, 6]. Se pueden apreciar los siguientes pares repetidos:
+
+- [-12,6] aparece cuatro vececes
+- [6,5] aparece dos veces
+- [5,12] aparece dos veces 
+
+=== Compresión Repair 
+- Iteración 1: El par mas frecuente es [-12,6] con frecuencia 4:
+
+$ A-> (-12)quad 6 $
+
+Reemplazando las 4 ocurrencias:
+
+$ D S A_0 =[18, A, 5, -12, -4, 6, 9, A, 3, -2, 4, A, 5,A] $
+
+- Iteración 2: El par mas frecuente es [A,5] con frecuencia 2:
+
+$ B-> A quad 5 $
+Reenplazando: 
+
+$ D S A_0=[18, B, -12, -4, 6, 9, A, 3, -2, 4, B , A] $
+
+- iteración 3: Repair termina dado que no hay par con frecuencia mayor a 1. 
+
+La gramatica final entonces: 
+
+$ A ->(-12) quad 6 $
+$ B -> A quad 5 $
+$ S-> [18, B, -12, -4, 6, 9, A, 3, -2, 4, B , A] $
+
+=== Metadata
+
+- Para cualquier terminal v: l=1, d=v, $m_min$=v, $p_min$=1, $m_max$=v, $p_max$=1. 
+
+- *No-terminal A: A$->$(-12) 6*:
+    l(A)= 1 + 1= 2
+
+    d(A)= -12 + 6 = -6
+
+    Sumas parciales= PS(1)= -12, PS(2)= -12 +6 = -6 
+
+    $m_min$(A)= min(-12,-6) = -12 
+
+    $p_min$(A)= 1
+
+    $m_max$(A)= max(-12,-6) = -6
+
+    $p_max$(A)= 1 + 1 = 2
+
+#pagebreak()
+- *No-terminal B: B$->A quad 5$*
+
+    l(B) = 2 + 1 = 3
+    d(B) = -6 + 5 = -1
+
+    Sumas parciales= PS(1)= -12, PS(2)= -6, PS(3) = -6 + 5= -1
+
+    $m_min$(B)= -12
+
+    $p_min$(B)= 1
+
+    $m_max$(B)= max(-12,-6) = -1
+
+    $p_max$(B)= 3
+     
+     #figure(
+  table(
+    columns: 8,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 8)[*Tabla de metadatos*],
+    table.hline(),
+    [], [*Regla*], [*l*], [*d*], [$m_"min"$], [$p_"min"$], [$m_"max"$], [$p_"max"$],
+    table.hline(),
+    [A], [{-12, 6}], [2], [-6], [-12], [1], [-6],  [2],
+    [B], [{A, 5}],   [3], [-1], [-12], [1], [-1],  [3],
+    table.hline(),
+  ),
+  caption: [Tabla de metadatos],
+) <tab:metadatos>
+
+=== Estructuras auxiliares 
+La secuencia $D S A_0$ tiene 12 simbolos: $s_1$=18, $s_2$=B, $s_3$=-12, $s_4$=-4, $s_5$=6, $s_6$=9, $s_7$=A, $s_8$=3, $s_9$=-2, $s_10$=4, $s_11$=B, $s_12$=A.
+
+    + Array L: 
+      #figure(
+  table(
+    columns: 4,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 4)[*Array L*],
+    table.hline(),
+    [*x*], [$s_x$], [$l(s_x)$], [*L[x]*],
+    table.hline(),
+    [0],  [-],   [-], [0],
+    [1],  [18],  [1], [1],
+    [2],  [B],   [3], [4],
+    [3],  [-12], [1], [5],
+    [4],  [-4],  [1], [6],
+    [5],  [6],   [1], [7],
+    [6],  [9],   [1], [8],
+    [7],  [A],   [2], [10],
+    [8],  [3],   [1], [11],
+    [9],  [-2],  [1], [12],
+    [10], [4],   [1], [13],
+    [11], [B],   [3], [16],
+    [12], [A],   [2], [18],
+    table.hline(),
+  ),
+  caption: [Tabla de cálculo de array L],
+) <tab:arrayl>
+
+    + Array A 
+      #figure(
+        table(
+          columns: 3,
+          align: center,
+          table.hline(),
+          table.cell(colspan: 3)[*Array A*],
+          table.hline(),
+          [*x*], [$d(s_x)$], [*A[x]*],
+          table.hline(),
+          [0],  [-],   [0],
+          [1],  [18],  [18],
+          [2],  [-1],  [17],
+          [3],  [-12], [5],
+          [4],  [-4],  [1],
+          [5],  [6],   [7],
+          [6],  [9],   [16],
+          [7],  [-6],  [10],
+          [8],  [3],   [13],
+          [9],  [-2],  [11],
+          [10], [4],   [15],
+          [11], [-1],  [14],
+          [12], [-6],  [8],
+          table.hline(),
+        ),
+        caption: [Tabla de cálculo de array A],
+      ) <tab:arraya>
+      
+    + Arrays $M_min$ y $M_max$
+    #figure(
+  table(
+    columns: 8,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 8)[*Arrays $M_"min"$ y $M_"max"$*],
+    table.hline(),
+    [*x*], [$s_x$], [$A[x-1]$], [$m_"min"$], [$m_"max"$], [$M_"min"[x]$], [$M_"max"[x]$],
+    table.hline(),
+    [1],  [18], [0],  [18],  [18], [18], [18],
+    [2],  [B],  [18], [-12], [-1], [6],  [17],
+    [3],  [-12],[17], [-12], [-12],[5],  [5],
+    [4],  [-4], [5],  [-4],  [-4], [1],  [1],
+    [5],  [6],  [1],  [6],   [6],  [7],  [7],
+    [6],  [9],  [7],  [9],   [9],  [16], [16],
+    [7],  [A],  [16], [-12], [-6], [4],  [10],
+    [8],  [3],  [10], [3],   [3],  [13], [13],
+    [9],  [-2], [13], [-2],  [-2], [11], [11],
+    [10], [4],  [11], [4],   [4],  [15], [15],
+    [11], [B],  [15], [-12], [-1], [3],  [14],
+    [12], [A],  [14], [-12], [-6], [2],  [8],
+    table.hline(),
+  ),
+  caption: [Tabla de cálculo de arrays $M_"min"$ y $M_"max"$],
+) <tab:arrayammaxmin>
+=== Read y MEMs 
+
+Sea el read ATGCG, que es exactamente el genoma 1, el FM-index encuentra dos MEMs:                                                                                                                
+- MEM 1: El read completo se encuentra en el intervalo [sp=7,ep=7]. Solo una ocurrencia SA[7]=7. min=max=7
+- MEM 2: TGC. Intevalo= [sp=16,ep=18]. Esto arroja tres ocurrencias. SA[16]=14, SA[17]=2, SA[18]=8. Se requiere min y max. Es decir, RangeMin(SA[16..18]) y RangeMax(SA[16..18])
+
+=== Consulta RangeMin(SA[16..18]) y RangeMax(SA[16..18])
+
+#desarrollo[
+
+ *Paso 1: Localizar los símbolos extremos* 
+$ s p = 16: L[10]=13 < 16 <= L[11]=16 -> x=11 (S_11=B quad c u b r e quad D S A [14..16]) $
+$ e p = 18: L[11]=16 < 18 <= L[12]=18 -> y=12 (S_12=A quad c u b r e quad D S A  [17..18]) $
+
+  *Paso 2: Descomponer en partes*
+  - Parte (i): DSA[16..16] -Cola derecha de $s_11$=B (parcial: solo la última posición de B)
+  - Parte (ii): vacía - No hay simbolos completos entre x=11 e y=12
+
+  - Parte (iii): DSA[17..18] - $s_12$ = A completo (ep=18=L[12])
+]
+  #pagebreak()
+
+  #desarrollo[
+*Paso 3: Resolver parte (iii)* 
+Como A es un simbolo completo, se usa $M_min$ y $M_max$ directamente: 
+
+$ m i n_(d e r) = M_(min)[12]=2 ,quad  p o s i c i ó n:L[11] + p_(min)(A)=16+1=17 $
+$ m a x_(d e r)= M_(max)[12]=8, quad p o s i c i ó n:L[11]+p_(min)(A)=18 $
+
+Esto quiere decir que A cubre SA[17..18]=[2,8]. min=2 en SA[17] y max=8 en SA[18] es consistente.
+
+*Paso 4: Resolver la parte (i)-Descenso en B*: B cubre DSA[14..16], pero solo se necesita DSA[16..16]: la posición 3 de B.
+
+$ o f f s e t quad l o c a l: a=3, b=3 quad (u n a quad s o l a quad  p o s i c i ó n ) $
+$ v a l o r quad b a s e: f= A[10]=15quad(p o r q u e quad S A[L[10]]=S A[13]=15) $
+
+Se desciende en B $->$A 5, donde l(A)=2 y l(5)=1. El offset cumple con a=3 $>$l(A)=2, asi que la posición 3 esta completamente en el hijo derecho. Este es el sub-caso B (en el procedimiento general expuesto en el algoritmo): todo el rango esta en $Y_2$. Antes de entrar en $Y_2$, se debe saltar $Y_1$=A. Actualizando el acumulador:
+$ f -> f+d(A)=15+(-6)=9 $
+
+Esto es así pues d(A)=-6 significa que SA avanza -6 a lo largo de la expansión de A. SA[L[10]] era el punto de referencia. Despues de pasar por los 2 valores de A, el nuevo punto de referencia es SA[L[10]+2]=SA[15]=15+(-6)=9, lo cual es consistente. 
+Estando en el terminal 5: 
+$ m i n_(i z q) = f+5 = 9+5=14,quad p o s i c i ó n: L[10]+3=13+3=16 $
+$ m a x_(i z q) = f+5 = 9+5=14,quad p o s i c i ó n: 16 $
+Lo cual es consistente: SA[16]=14
+
+  ]
+
+#pagebreak()
+#desarrollo[
+*Paso 5: Combinar*
+
+#figure(
+  table(
+    columns: 5,
+    align: center,
+    table.hline(),
+    table.cell(colspan: 5)[*Arrays $M_"min"$ y $M_"max"$*],
+    table.hline(),
+    [*Parte*], [*Min*], [*Pos min*], [*Max*], [*Pos Max*],
+    table.hline(),
+    [Descenso en B], [14], [16], [14], [16],
+    [A completa],    [2],  [17], [8],  [18],
+    table.hline(),
+  ),
+)
+
+$ r e s u l t_(m i n)= min(14,2)=2 ,e n quad p o s i c i ó n quad 17 $
+$ r e s u l t_(m a x)= max(14,8)=14, e n quad p o s i c i ó n quad 16 $
+Verificando, se cumple justamente que: SA[16..18]=[14,2,8]. min=2 en SA[17] y max=14 en SA[16]
+]
+  
+    == Integración con el pipeline
+     Lo que se ha hecho hasta ahora ha sido construir una forma eficiente de resolver el paso central del pipeline: dado un intervalo [sp..ep] del suffix array, encontrar min(SA[sp..ep]) y max(SA[sp..ep]) sin enumerar todas las ocurrencias. A continuación se presentará como unir todo desde un read del ADN hasta una clasificación taxonómica.
+     Dado un arbol filogenetico T con genomas $G_1$ a $G_D$:
+
+     *Fase de construcción*
+
+      + Construir el Suffix Array $S A[1..n]$ de $T$
+      + Calcular el $D S A$
+      + Comprimir el $D S A$ con Repair: gramática $g$ con reglas $X -> Y_1 Y_2$ y secuencia $D S A_0$
+      + Calcular metadata para cada no-terminal $X$: $l(X)$, $d(X)$, $m_"min"(X)$, $p_"min"(X)$, $m_"max"(X)$, $p_"max"(X)$
+      + Construir estructuras auxiliares $L, A, M_"min", M_"max"$ y estructuras RMQ sucintas sobre $M_"min"$, $M_"max"$
+      + Construir bitvector $B[1..n]$
+      + LCA
+      + Construir el índice con ropebwt3 para encontrar MEMs
+  #pagebreak()
+      *Fase de consulta*
+
+      Dado un read $R$:
+
+      + Encontrar MEMs de $R$ respecto a la colección usando ropebwt3. Resultado: lista de MEMs, cada uno con intervalo $[s p_i, e p_i]$
+      + Para cada $M E M_i$ con intervalo $[s p_i, e p_i]$:
+        - $f i r s t_("pos"_i)$ = $"RangeMin"(S A[s p_i .. e p_i])$ usando el algoritmo de descenso por la gramática del DSA
+        - $l a s t_("pos"_i)$ = $"RangeMax"(S A[s p_i .. e p_i])$ usando el mismo algoritmo con metadata de máximo
+        - $f i r s t_("genome"_i)$ = $B . "rank"_1 (f i r s t_("pos"_i))$
+        - $l a s t_("genome"_i)$ = $B . "rank"_1 (l a s t_("pos"_i))$
+        - $l c a_i$ = $"LCA"("hoja"[f i r s t_("genome"_i)], "hoja"[l a s t_("genome"_i)])$
+      + Clasificar el read basándose en el MEM más largo
     == Implementación
-    #lorem(100)
     @NewmanT42
 ]
 
 #capitulo(title: "Experimentación")[
    
-    == Definición de la metadata
+  == Indices testeados
+  == colecciones
+  == Resultados
  
     
-    #lorem(100)
     @NewmanT42 
 ]
 
