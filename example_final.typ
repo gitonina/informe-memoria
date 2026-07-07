@@ -138,23 +138,25 @@
 )
 #resumen(metadata: example-metadata)[
 
- El siguiente documento aborda la construcción y experimentación de un indice basado en la compresión del arreglo diferencial de sufijos DSA mediante Repair, utilizando metadata en los nodos no-terminales y terminales, de forma que dado un intervalo [sp,ep] en el arreglo de sufijos SA, encontrar min(SA[sp..ep]) (la ocurrencia más a la izquierda del texto) y max(SA[sp..ep]) (la ocurrencia más a la derecha en el texto), sin tener que leer todas las ep - sp +1 posiciones del SA.
-
-El DSA de textos repetitivos (como colecciones de genomas) tiene muchos valores repetidos, por esta razón se comprime bien usando Repair, un algoritmo que reemplaza pares frecuentes por nuevos símbolos, produciendo una gramática. Adaptando las ideas,lemas y algoritmos expuestos en el paper \textit{Fully-Functional Trees and Optimal Text Searching in BWT-runs Bounded Space~\cite{gagie2019jacm}} , se construyó el indice basado en el DSA comprimido con Repair. 
-
-Se comparará contra otros indices (en particular el sr-index) para ver su desempeño en términos de tiempo y espacio. donde todo esto será representado mediante gráficos y tablas comparativas. 
+En el contexto de la clasificación taxonómica, uno de los problemas centrales es determinar de qué organismo proviene un fragmento de ADN (_read_). Para ello, se cuenta con una colección de genomas organizados en un árbol filogenético, donde las hojas representan genomas y los nodos internos representan ancestros comunes. Los genomas se concatenan en el orden de las hojas del árbol, y cuando un patrón (o MEM, una coincidencia exacta maximal entre el _read_ y la colección) aparece en varios genomas, es necesario identificar el primero y el último genoma donde ocurre, para luego calcular el ancestro común más bajo (LCA) en el árbol y así clasificar el _read_.
+Este problema se traduce, a nivel de estructuras de datos, en encontrar el mínimo y el máximo del arreglo de sufijos (SA) dentro de un intervalo: dado un intervalo [sp, ep] que representa todas las ocurrencias de un MEM, min(SA[sp..ep]) indica la posición más a la izquierda en el texto (primer genoma) y max(SA[sp..ep]) indica la posición más a la derecha (último genoma). El enfoque directo, utilizado por índices como el sr-index, consiste en recorrer, una por una, las ep − sp + 1 posiciones para encontrar el mínimo y el máximo, con un costo proporcional al número de ocurrencias. Para MEMs con miles o millones de ocurrencias, este costo se vuelve significativo.
+Este trabajo propone un enfoque alternativo: construir un índice basado en la compresión gramatical del arreglo diferencial de sufijos (DSA) mediante el algoritmo RePair, almacenando en cada nodo de la gramática información agregada (metadata) que permite responder las consultas de mínimo y máximo descendiendo por la estructura de la gramática, sin enumerar las ocurrencias. El costo de cada consulta depende de la altura de la gramática y no del número de ocurrencias, lo que representa una ventaja sustancial en colecciones repetitivas.
+La viabilidad de este enfoque se sustenta en que el DSA de textos repetitivos, como colecciones de genomas, tiene una estructura altamente repetitiva inducida por las runs de la BWT, lo que permite que RePair lo comprima eficientemente. Las ideas, lemas y algoritmos que fundamentan esta construcción fueron adaptados a partir de los resultados expuestos en el paper _Fully-Functional Suffix Trees and Optimal Text Searching in BWT-runs Bounded Space_, el cual fue escrito por Gonzalo Navarro, Travis Gagie y Nicola Prezza.
+El índice propuesto se compara experimentalmente contra el sr-index en términos de tiempo de consulta y espacio ocupado. Los resultados se presentan mediante gráficos y tablas comparativas que evidencian el _trade-off_ entre ambos enfoques.
 ]
-
 #dedicatoria[
     Para mis padres.
 ]
 
 #agradecimientos[
-    #lorem(150)
-    
-    #lorem(100)
-    
-    #lorem(100)
+  Primero quiero agradecer a mis padres, quienes siempre estuvieron para mí cuando más lo necesité. Nunca me faltaron en toda mi vida, y me apoyaron en cada uno de mis proyectos personales y mis decisiones, siempre aconsejándome.
+  También quiero agradecer a mi familia, mis primos, mi abuela, mis tíos, todos. Forman parte de mi vida y siempre desearon lo mejor para mí.
+
+  Quiero también agradecer al profesor Gonzalo por darme la oportunidad de trabajar en esta memoria, por ayudarme cuando tuve dudas y por tener siempre la
+  disposición para ayudarme cada vez que lo necesité.
+
+  También quiero agradecer a mis amigos de la universidad, en particular al gran grupo que tuve en el DCC (panas). Cada uno me aportó algo en mi vida. Extrañaré
+  por siempre los momentos juntos en la facultad.
 ]
 
 #show: start-doc
@@ -162,19 +164,51 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
 #capitulo(title: "Introducción")[
     == Contexto y problemática
 
-    El estudio de la evolución de las especies es uno de los objetivos principales de la bioinformatica, una disciplina que combina ciencias informáticas para almacenar y analizar grandes volúmenes de datos biológicos como secuencias de ADN, aminoácidos y demás moléculas biológicas. Un gen es un segmento de ADN, y un genoma es la suma total de toda la información genética de un organismo. Teniendo en cuenta la gran cantidad de especies que existe y que ademas se tienen una enorme cantidad de colecciones de genomas, es desafiante y complejo al mismo tiempo contestar preguntas como: ¿Donde aparece una secuencia particular dentro de un genoma?, ¿Cuántas veces aparece una secuencia en un conjunto de genomas?.
+    El estudio de la evolución de las especies es uno de los objetivos principales de la bioinformática, una disciplina que combina ciencias informáticas para almacenar y analizar grandes volúmenes de datos biológicos como secuencias de ADN, aminoácidos y demás moléculas biológicas. Un gen es un segmento de ADN, y un genoma es la suma total de toda la información genética de un organismo. Teniendo en cuenta la gran cantidad de especies que existe y que además se tiene una enorme cantidad de colecciones de genomas, es desafiante y complejo al mismo tiempo contestar preguntas como: ¿Dónde aparece una secuencia particular dentro de un genoma?, ¿Cuántas veces aparece una secuencia en un conjunto de genomas?
 
-    Un árbol filogenético es una estructura que permite representar las relaciones de parentesco entre especies y que muestra los cambios en los genes con el pasar del tiempo. Una colección de genomas se organiza según esta estructura y la problemática principal surge a partir de esto: se busca una secuencia de ADN o un gen en esta colección, y se quiere identificar todas sus ocurrencias, mapearlas a los genomas que las contienen, y calcular el ancestro común mas bajo (Lowest Common Ancestor LCA) de esos nodos, el cual, es un candidato para la especie donde comenzó a expresarse este gen. Lo difícil radica en que las secuencias no suelen encontrase exactamente debido a mutaciones, inserciones o recombinaciones. Por lo tanto, la búsqueda se basa en encontrar las coincidencias máximas, las cuales se representan con una estructura llamada Maximal Exact Matches (MEMs). Calcular MEMs requiere estructuras de datos como los Suffix Array (SA) , FM-indexes, entre otros que serán definidos mas adelante. 
+    Un árbol filogenético es una estructura que permite representar las relaciones de parentesco entre especies y que muestra los cambios en los genes con el pasar del tiempo. Una colección de genomas se organiza según esta estructura y la problemática principal surge a partir de esto: se busca una secuencia de ADN o un gen en esta colección, y se quiere identificar todas sus ocurrencias, mapearlas a los genomas que las contienen, y calcular el ancestro común más bajo (Lowest Common Ancestor, LCA) de esos nodos, el cual es un candidato para la especie donde comenzó a expresarse este gen. Lo difícil radica en que las secuencias no suelen encontrarse exactamente debido a mutaciones, inserciones o recombinaciones. Por lo tanto, la búsqueda se basa en encontrar las coincidencias máximas, las cuales se representan con una estructura llamada Maximal Exact Matches (MEMs). Calcular MEMs requiere estructuras de datos como los Suffix Array (SA), FM-indexes, entre otros que serán definidos más adelante. 
 
-    Una gramática libre de contexto es un conjunto de reglas de reemplazo. Tiene dos tipos de símbolos: los terminales (valores finales) y los no-terminales (nombres que representan patrones). Cada regla dice los símbolos que reemplazan cierto no-terminal. 
+    #pagebreak()
+    Cuando un MEM tiene múltiples ocurrencias en la colección, estas se distribuyen a lo largo de la concatenación de los genomas. Dado que los genomas están concatenados en el orden de las hojas del árbol filogenético (de izquierda a derecha), las posiciones de las ocurrencias en el texto reflejan la posición de los genomas en el árbol. La ocurrencia más a la izquierda en el texto (el mínimo del arreglo de sufijos en el intervalo del MEM) corresponde al primer genoma en el orden del árbol donde aparece el MEM, y la ocurrencia más a la derecha (el máximo) corresponde al último genoma. El ancestro común más bajo (LCA) de estas dos hojas extremas necesariamente contiene a todas las hojas intermedias, porque las hojas de cualquier subárbol forman un rango contiguo en el orden de izquierda a derecha. Por lo tanto, no es necesario examinar todas las ocurrencias para determinar el LCA: basta con encontrar la primera y la última. Formalmente, dado el intervalo [sp, ep] del arreglo de sufijos que contiene las posiciones de todas las ocurrencias de un MEM, el problema se reduce a calcular:
+
+    $ min(S A [s p..e p]): "la posición en el texto de la ocurrencia más a la izquierda" $
+    $ max(S A [s p..e p]): "la posición en el texto de la ocurrencia más a la derecha" $
     
-    Partiendo del símbolo S, se aplican las reglas hasta que no queden no-terminales, y lo que queda es la cadena que la gramática genera. La compresión por gramáticas es un caso particular donde la gramática genera exactamente una cadena (la secuencia original S). 
+    Estas dos consultas corresponden a lo que se conoce como Range Minimum Query (RMQ) y Range Maximum Query (RMaxQ) sobre el arreglo de sufijos. Una RMQ sobre un arreglo A[1..n] consiste en, dado un rango [i, j], encontrar el valor mínimo de A en ese rango: RMQ(i, j) = min(A[i], A[i+1], ..., A[j]). La RMaxQ es análoga pero busca el máximo.
 
-    Esto se logra restringiendo la gramática para que cada no-terminal tenga exactamente una regla, y que no haya ciclos. Cada no-terminal captura un patrón repetido de la secuencia: en vez de almacenar todas sus ocurrencias, se almacena una sola regla que lo define, y se referencia por su nombre. El tamaño de la gramática (la suma de símbolos en los lados derechos de todas las reglas) es la medida de compresión, y para secuencias altamente repetitivas puede ser dramáticamente menor que el largo original.
+    El sr-index (subsampled r-index), presentado por Dustin Cobas, Travis Gagie y Gonzalo Navarro @cobas2025talg, es un índice comprimido diseñado para colecciones de texto altamente repetitivas. Su espacio es proporcional a r, el número de runs de la Transformada de Burrows-Wheeler (BWT), lo que lo hace muy compacto cuando la colección tiene alta repetitividad. El sr-index soporta la operación de localización (locate): dado un intervalo [sp, ep] producido por el backward search, puede recuperar las posiciones SA[sp], SA[sp+1], ..., SA[ep] en el texto. Sin embargo, para obtener el mínimo y el máximo, el sr-index debe enumerar todas las ep − sp + 1 posiciones una por una (mediante aplicaciones sucesivas de la función Φ) y luego recorrerlas linealmente para encontrar los extremos. El costo de este procedimiento es O(s · occ), donde occ = ep − sp + 1 es el número de ocurrencias y s es un parámetro de submuestreo. Para MEMs con miles o millones de ocurrencias, este costo lineal se vuelve un cuello de botella.
+    #pagebreak()
+    Una gramática libre de contexto es un conjunto de reglas de reemplazo. Tiene dos tipos de símbolos: los terminales (valores finales) y los no-terminales (nombres que representan patrones). Cada regla indica los símbolos que reemplazan cierto no-terminal. 
+    
+    Partiendo de un simbolo inicial, se aplican las reglas hasta que no queden no-terminales, y lo que queda es la cadena que la gramática genera. La compresión por gramáticas es un caso particular donde la gramática genera exactamente una cadena (la secuencia original). Dado el siguiente ejemplo: 
+$
+     S ->A B , 
+     quad
+     A-> "hola", 
+     quad 
+     B-> "mundo"
+$
+    Partiendo de S, se reemplaza A y B: $S->"hola mundo"$
 
+    Esto se logra restringiendo la gramática para que cada no-terminal tenga exactamente una regla, y que no haya ciclos. Cada no-terminal captura un patrón repetido de la secuencia: en vez de almacenar todas sus ocurrencias, se almacena una sola regla que lo define, y se referencia por su nombre. El tamaño de la gramática (la suma de símbolos en los lados derechos de todas las reglas) es la medida de compresión, y para secuencias altamente repetitivas puede ser dramáticamente menor que el largo original. Un ejemplo de esto es el siguiente: 
+
+
+    El arreglo diferencial de sufijos (DSA) almacena las diferencias entre valores consecutivos del arreglo de sufijos: 
+    $ D S A[1]=S A[1] $
+    $ D S A[p] = S A[p] - S A[p-1] "para todo" p>=2 $
+
+    Los valores originales del SA se pueden reconstruir a partir del DSA mediante sumas parciales: SA[p] = SA[q] + Σ desde j=q+1 hasta p de DSA[j], para cualquier posición de referencia q < p. Esta propiedad permite expresar las consultas de mínimo y máximo como:
+
+    $ min(S A[s p..e p])= S A[s p -1] + "mín de las sumas parciales de DSA[sp..ep] " $
+
+    $ max(S A[s p..e p])= S A[s p -1] + "máx de las sumas parciales de DSA[sp..ep] " $
+
+    La utilidad del DSA radica en que, para colecciones de texto altamente repetitivas, hereda la estructura repetitiva de la BWT. Travis Gagie et al. @gagie2019jacm demostraron que si dos posiciones consecutivas del arreglo de sufijos están dentro de una misma run de la BWT (es decir, BWT[p−1] = BWT[p]), entonces DSA[LF(p)] = DSA[p]: el mismo valor del DSA aparece copiado en otra posición. Como consecuencia, el DSA admite un esquema de macro bidireccional de tamaño O(r), lo que implica que puede representarse mediante una gramática libre de contexto de tamaño O(r log(n/r)). Para colecciones genómicas donde r es mucho menor que n, esto permite una compresión dramática del DSA, y al almacenar metadata de sumas parciales (mínimo y máximo) en cada no-terminal de la gramática, se pueden responder las consultas de RMQ y RMaxQ sobre el SA sin enumerar las ocurrencias, en tiempo proporcional a la altura de la gramática.
+
+    
 
     Se ha demostrado que la compresión por gramáticas es una herramienta muy
-    efectiva para representar secuencias diferenciales altamente repetitivas, como el arreglo diferencial de LCP (Longest Common Prefix: almacena, para cada par de sufijos consecutivos en el orden lexicográfico del arreglo de sufijos, cuántos caracteres comparten al inicio), peremitiendo responder consultas de rango y de prefijos a partir de metadatos
+    efectiva para representar secuencias diferenciales altamente repetitivas, como el arreglo diferencial de LCP (Longest Common Prefix: almacena, para cada par de sufijos consecutivos en el orden lexicográfico del arreglo de sufijos, cuántos caracteres comparten al inicio), permitiendo responder consultas de rango y de prefijos a partir de metadatos
     almacenados en cada no terminal de la gramática. 
     Este enfoque sugiere que, si en lugar de
     comprimir LCP se comprime directamente el DSA, y si a cada regla se le asocia la suma
@@ -184,15 +218,15 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
     max(SA[sp..ep]) se traslada a operaciones sobre la gramática (en tiempo sublineal o logarítmico respecto al tamaño del texto) mientras que el espacio ocupado depende del tamaño de
     la gramática y no del número total de sufijos. Esta combinación de compresión y soporte de
     consultas de rango es precisamente lo que hace atractivo el uso de gramáticas sobre el DSA
-    como base para el indice propuesto en esta memoria.
+    como base para el índice propuesto en esta memoria.
 
     == Baseline
 
-    El baseline con el cual se compara la propuesta es el sr-index. Este indice resuelve el mismo problema pero de manera diferente. La implementación se puede encontrar en https://github.com/duscob/sr-index la cual fue hecha por Dustin Cobas.
+    El baseline con el cual se compara la propuesta es el sr-index. Este índice resuelve el mismo problema pero de manera diferente. La implementación se puede encontrar en https://github.com/duscob/sr-index la cual fue hecha por Dustin Cobas.
 
     == Contribución de la memoria
 
-    + *Comprimir el DSA con Repair*: Almacenar en cada no-terminal seis campos: longitud l(X), suma total d(X), mínimo de sumas parciales $m_{min}(X)$, posición del mínimo $p_{min}(X)$, máximo de sumas parciales $m_{max}(X)$, y posición del máximo $p_{max}(X).$
+    + *Comprimir el DSA con Repair*: Almacenar en cada no-terminal seis campos: longitud l(X), suma total d(X), mínimo de sumas parciales $m_min(X)$, posición del mínimo $p_min(X)$, máximo de sumas parciales $m_max(X)$, y posición del máximo $p_max(X).$
     + *Responder min(SA[sp..ep]) y max(SA[sp..ep]) en tiempo o(h)*: Siendo h la altura de la gramática, descendemos recursivamente combinando la metadata, sin necesidad de enumerar las ocurrencias.
     + *Integrar esta estructura en el pipeline de clasificación taxonómica*: Los intervalos [sp, ep] producidos por el FM-index para cada MEM se consultan sobre la gramática del DSA para obtener la primera y última posición en el texto.
 ]
@@ -243,7 +277,7 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
 
    == Run-Length FM-index
 
-   El FM-index es un indice comprimido que permite buscar patrones en T sin alamacenar T explicitamente, y se basa en en la BWT. El Run-Length FM-index es una variante del F-index, diseñada para textos repetitivos. Usa el hecho de que la BWT de un texto repetitivo tiene pocas runs: alcmacena la BWT de forma compacta representando cada run por su carácter y su longitud. 
+   El FM-index es un índice comprimido que permite buscar patrones en T sin alamacenar T explicitamente, y se basa en en la BWT. El Run-Length FM-index es una variante del F-index, diseñada para textos repetitivos. Usa el hecho de que la BWT de un texto repetitivo tiene pocas runs: alcmacena la BWT de forma compacta representando cada run por su carácter y su longitud. 
    #pagebreak()
    == Arreglo diferencial de sufijos DSA
 
@@ -251,7 +285,7 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
 
     DAS[1] = SA[1]
 
-    DSA[p] = SA[p] - SA[p-1] para todo p$\geq$2
+    DSA[p] = SA[p] - SA[p-1] para todo p$>=$2
 
     Es decir, DSA almacena las diferencias entre valores consecutivos del arreglo de sufijos. Los valores del SA son enteros con signo, que pueden ser positivos o negativos.
 
@@ -346,7 +380,7 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
 #pagebreak()
     == Taxonomic classification with maximal exact matches in katka kernels and minimizers digests
       
-       Este trabajo (que llamaremos Sea24) [3], aborda como clasificar un read de ADN (de
+       Este trabajo (que llamaremos Sea24) @draesslerova2024sea, aborda como clasificar un read de ADN (de
         terminar de qué organismo proviene) usando una colección de genomas organizados en un
         árbol filogenético. Aquí es donde se propone usar MEMs en vez de k-mers (estructura que
         funciona pero no en todos los casos, por ejemplo, bases de datos de distinto tamaño, arboles
@@ -378,7 +412,7 @@ Se comparará contra otros indices (en particular el sr-index) para ver su desem
   #pagebreak()  
     == Fast and small subsampled r-indexes.
     
-      Este paper (talg25) [2]presenta el baseline con el que se compararía el indice propuesto en
+      Este paper (talg25) @cobas2025talg presenta el baseline con el que se compararía el índice propuesto en
 esta memoria. La versión original del r-index requería estructuras adicionales para la recu
 peración eficiente de posiciones en el arreglo de sufijos, así como mecanismos complejos para
 extender los valores muestreados a posiciones vecinas. Además, aunque su espacio teórico era
@@ -720,9 +754,9 @@ n, y para textos repetitivos g$<<$ n.
   #paso[Paso 1: Localizar los símbolos extremos][
   Hacemos dos búsquedas binarias sobre el array L para encontrar: 
 
-    - x: el indice del símbolo de $D S A_0$ que contiene la posición sp. Es decir, el x tal que L[x-1]$<$sp$<=$L[x].
+    - x: el índice del símbolo de $D S A_0$ que contiene la posición sp. Es decir, el x tal que L[x-1]$<$sp$<=$L[x].
 
-    - y: el indice del simbolo de $D S A_0$ que contiene la posición sp. Es decir, el y tal que L[y-1]$<$ep$<=$L[y].
+    - y: el índice del simbolo de $D S A_0$ que contiene la posición sp. Es decir, el y tal que L[y-1]$<$ep$<=$L[y].
   ]
 
   #paso[Paso 2: Descomponer en 3 partes][
@@ -782,7 +816,7 @@ y al final, $s u m_L$ se obtiene como d($Y_1$) menos esa acumulación.
  ]
 
     == Ejemplo completo  
-    A continuación se presentará un ejemplo de como funciona este indice aplicado al DSA:
+    A continuación se presentará un ejemplo de como funciona este índice aplicado al DSA:
 
     Dado el siguiente texto: T= A T G C A $\$$ A T G C G $\$$ C T G C A $\$$
     
@@ -840,21 +874,21 @@ y al final, $s u m_L$ se obtiene como d($Y_1$) menos esa acumulación.
     [1],  [18], [-],  [18],
     [2],  [6],  [18], [-12],
     [3],  [12], [6],  [6],
-    [4],  [17], [17], [5],
-    [5],  [5],  [5],  [-12],
+    [4],  [17], [12], [5],
+    [5],  [5],  [17],  [-12],
     [6],  [1],  [5],  [-4],
     [7],  [7],  [1],  [6],
-    [8],  [16], [16], [C],
-    [9],  [10], [4],  [C],
-    [10], [13], [10], [C],
-    [11], [11], [13], [G],
-    [12], [15], [11], [G],
-    [13], [3],  [15], [G],
-    [14], [9],  [3],  [G],
-    [15], [14], [9],  [T],
-    [16], [2],  [14], [T],
-    [17], [8],  [2],  [T],
-    [18], [8],  [2],  [T],
+    [8],  [16], [7], [9],
+    [9],  [4], [16],  [-12],
+    [10], [10], [4], [6],
+    [11], [13], [10], [3],
+    [12], [11], [13], [-2],
+    [13], [15],  [11], [4],
+    [14], [3],  [15],  [-12],
+    [15], [9], [3],  [6],
+    [16], [14],  [9], [5],
+    [17], [2],  [14],  [-12],
+    [18], [8],  [2],  [6],
     table.hline(),
   ),
   caption: [Differential Suffix Array DSA ],
@@ -933,14 +967,14 @@ $ S-> [18, B, -12, -4, 6, 9, A, 3, -2, 4, B , A] $
     table.hline(),
     [], [*Regla*], [*l*], [*d*], [$m_"min"$], [$p_"min"$], [$m_"max"$], [$p_"max"$],
     table.hline(),
-    [A], [{-12, 6}], [2], [-6], [-12], [1], [-6],  [2],
-    [B], [{A, 5}],   [3], [-1], [-12], [1], [-1],  [3],
+    [A], [(-12)6], [2], [-6], [-12], [1], [-6],  [2],
+    [B], [A 5],   [3], [-1], [-12], [1], [-1],  [3],
     table.hline(),
   ),
   caption: [Tabla de metadatos],
 ) <tab:metadatos>
-
 === Estructuras auxiliares 
+
 La secuencia $D S A_0$ tiene 12 simbolos: $s_1$=18, $s_2$=B, $s_3$=-12, $s_4$=-4, $s_5$=6, $s_6$=9, $s_7$=A, $s_8$=3, $s_9$=-2, $s_10$=4, $s_11$=B, $s_12$=A.
 
     + Array L: 
@@ -1002,12 +1036,12 @@ La secuencia $D S A_0$ tiene 12 simbolos: $s_1$=18, $s_2$=B, $s_3$=-12, $s_4$=-4
     + Arrays $M_min$ y $M_max$
     #figure(
   table(
-    columns: 8,
+    columns: 7,
     align: center,
     table.hline(),
-    table.cell(colspan: 8)[*Arrays $M_"min"$ y $M_"max"$*],
+    table.cell(colspan: 7)[*Arrays $M_"min"$ y $M_"max"$*],
     table.hline(),
-    [*x*], [$s_x$], [$A[x-1]$], [$m_"min"$], [$m_"max"$], [$M_"min"[x]$], [$M_"max"[x]$],
+    [*x*], [$s_x$], [$A[x-1]$], [$m_"min"$], [$m_("max")$], [$M_("min")[x]$], [$M_("max")[x]$],
     table.hline(),
     [1],  [18], [0],  [18],  [18], [18], [18],
     [2],  [B],  [18], [-12], [-1], [6],  [17],
@@ -1089,6 +1123,7 @@ Lo cual es consistente: SA[16]=14
     [A completa],    [2],  [17], [8],  [18],
     table.hline(),
   ),
+   caption: [Tabla resumen descenso en grámatica],
 )
 
 $ r e s u l t_(m i n)= min(14,2)=2 ,e n quad p o s i c i ó n quad 17 $
@@ -1123,34 +1158,105 @@ Verificando, se cumple justamente que: SA[16..18]=[14,2,8]. min=2 en SA[17] y ma
         - $l a s t_("genome"_i)$ = $B . "rank"_1 (l a s t_("pos"_i))$
         - $l c a_i$ = $"LCA"("hoja"[f i r s t_("genome"_i)], "hoja"[l a s t_("genome"_i)])$
       + Clasificar el read basándose en el MEM más largo
-    == Implementación
-    @NewmanT42
 ]
 
 #capitulo(title: "Experimentación")[
    
-  == Indices testeados
-  == colecciones
+  == Setup experimental
+  Los experimentos fueron ejecutados en el servidor Knuth del departamento de Ciencias de la Computación de la Universidad de Chile, el cual tiene las siguientes especificaciones:
+
+  - CPU: Procesador Intel Xeon de 8 cores, corriendo a 2.4 GHz, apoyado por 10MB de memoria caché. 
+  - RAM: 125 GB
+  - Disco: 2TB 
+  - Sistema Operativo: Linux 
+
+El codigo se puede encontrar en * https://github.com/gitonina/DSA-Grammar *. El lenguaje ocupado fue C++, y la unica librería externa usada fue SDSL para la estructura RMQ sucinta. Los datasets fueron descargados de la pagina Pizza&Chili Corpus, con excepción del dataset llamado synth de la @tab:datasets que fue construido de un arhivo makeData. 
+
+*Datasets*
+
+#figure(
+  table(
+    columns: 5,
+    align: center,
+    table.hline(),
+    [*Dataset*], [*n (MB)*], [$sigma$], [*r*], [*n/r*],
+    table.hline(),
+    [synth],        [100],    [5], [908.820], [110,03],
+    [influenza],    [154.8],  [16], [3.022.822], [51,21],
+    [ecoli],        [112.69], [16], [15.044.487], [7,49],
+    [einstein],     [467.62], [139], [288.909], [1.610,36],
+    [worldleaders], [46.96],  [89], [569.732], [82,26],
+    table.hline(),
+  ),
+  caption: [Caracteristicas de los datasets utilizados],
+)<tab:datasets>
+#pagebreak()
++ *Synth*: Es un dataset generado con un archivo makeData.c, son 1000 genomas sintéticos de alrededor de 100.000 pb cada uno. Aplica mutaciones controladas para crear las 1000 variantes, por esto su repetitividad es intermedia y predecible. 
+
++ *Escherichia_Coli*: Colecciones de múltiples genomas completos de la bacteria E.coli, concatenados. Aunque son genomas de la misma especie, cada cepa acumula mutaciones puntuales propias, por esto, es el dataset con r mas alto de todos (menos compresible por BWT). 
+
++ *Influenza*: Colección de genomas completos del virus de la influenza, concatenados. Al ser un virus de ARN con tasa de mutación muy alta, también divergen bastante entre sí punto a punto, aunque un poco menos que ecoli.
+
++ *Einstein*: Corresponde a todas las versiones/revisiones sucesivas del arituclo de wikipedia en inglés sobre Albert Einstein, concatenadas una tras otra (historial de ediciones). Es el dataset mas repetitivo de todos. 
+
++ *World Leaders*: Colección de todos los archivos pdf de los lideres mundiales de la CIA desde 2003 a 2009. Son cientos de biografías breves con estructura repetitiva, aunque menos que Einstein porque el contenido entre sí varía. 
+ == Metodología
+
+ + Tiempo : Se midió en microsegundos ($mu$s) por consulta RMQ (min y max juntos)
+   - *Baseline (sr-index)*: se mide solo Locate()- que enumera todas las ocurrencias del intervalo [sp,ep] y posteriormente se calcula min/max. El Count() previo (que obtiene el intervalo) no se cronometra.
+   - *DSA-Index*: Se mide $r a n g e_min$(sp,ep) y  $r a n g e_max$(sp,ep) juntos (el descenso sobre la gramática aumentada con metadatos, sin enumerar ocurrencias).
+   - El número reportado por dataset es el promedio de todas las queries de ese dataset. 
+ + Patrones 
+   - Para los datasets de synth, influenza y ecoli, fueron 1000 patrones iniciales, 100 pb cada uno, extraidos aleatoriamente del texto (random.seed(42)). Las queries efectivas fueron 2890/ 1000/ 1000 MEMs respectivamente. El intervalo [sp,ep] se generó a partir de ropebwt3 mem -l40, el cual busca MEMs del patrón contra toda la colección. Un patrón puede generar 0,1 o varios MEMs. Para los datasets einstein y worldleaders, los patrones iniciales consistieron en 1000 substrings de 100 caracteres, con posiciones random sobre el texto linealizado (sin \\n). No se usó ropebwt3 para generar el intervalo, se usó Count() del sr-index sobre el substring completo para obtener el [sp,ep] real. Todos los patrones/MEMs se comparten entre baseline y DSA-index, mismos intervalos y mismo hardware. 
+
+ + Espacio: Como unidad de medida principal es bps (bits per symbol). Es la métrica estandar para comparar índices de distinto tamaño de texto en la misma escala. La unidad secundaria es MB absolutos, es util para dimensionar el costo real en memoria. Se mide y se comparan DSA-index y sr-index, variando en este último su parametro para el trade-off espacio-tiempo s (s=8 y s=16). Este parametro es la tasa de sampling del Suffix Array del sr-index: cada cuántas posiciones se guarda un valor explícito de SA: 
+   - s=8: un valor explícito cada 8 posiciones, lo que quiere decir que hay mas samples guardados, y mas espacio, pero Locate() es más rápido.
+
+   - s=16: la mitad de samples, por lo que ocupa menos espacio pero Locate() es más lento.  
+
+#pagebreak()
   == Resultados
- 
-    
-    @NewmanT42 
+  === Tradeoff espacio-tiempo global
+   #figure(
+  image("imagenes/grafico1a_tradeoff_espacio_tiempo.png", width: 100%),
+  caption: [Tradeoff espacio tiempo: synth, influenza y ecoli],
+) <fig:etiqueta>
+
+
+ #figure(
+  image("imagenes/grafico1b_tradeoff_espacio_tiempo.png", width: 100%),
+  caption: [Tradeoff espacio tiempo: einstein y worldleaders],
+) <fig:etiqueta>
+
+#pagebreak()
+  === Tiempo vs número de ocurrencias 
+   #figure(
+  image("imagenes/grafico2_tiempo_vs_ocurrencias.png", width: 100%),
+  caption: [Tiempo vs numero de ocurrencias para todos los datasets],
+) <fig:etiqueta>
+
+#pagebreak()
+  === Desglose de espacio
+     #figure(
+  image("imagenes/grafico3_desglose_espacio.png", width: 100%),
+  caption: [Desglose de espacio por dataset],
+) <fig:etiqueta>
 ]
 
+#capitulo(title: "Uso de inteligencia artificial")[
+El desarrollo de esta memoria tuvó uso de IA generativa. La asistencia con IA fue precisamente eso: asistencia para arreglar problemas de sintaxis con typst (editor de texto que se usó para la confección de este informe), equivalencias entre typst y latex (en un principio este informe fue hecho con latex, pero se decidió moverse a typst por conveniencia y por problemas con el compilador de latex), entendimiento de conceptos complejos en papers de la biliografia, arreglo de bugs en C++, bosquejos y borradores de codigos para estructuras, y finalmente ayuda para gramatica, ortografía y coherencia en la redacción de este informe. Las sugerencias de parte de la IA no fueron aceptadas inmediatamente, antes pasó por un proceso de testing y comprobación de que realmente servían y contribuían para esta memoria. 
+
+== Modelos usados 
+]
 #capitulo(title: "Conclusión")[
-    #lorem(100)
-    
-    #lorem(100)
-    
-    #lorem(100)
+    == Conclusiones generales
+    === Objetivo general
+    == Objetivos especificos
+    == Trabajo futuro
 ]
 
 #show: end-doc
 
 #apendice(title: "Anexo")[
-    #lorem(100)
-    
-    #lorem(100)
-    
-    #lorem(100)
+   
 ]
