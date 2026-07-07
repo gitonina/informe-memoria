@@ -39,6 +39,15 @@
   }
 )
 
+#let codigo(lang, cuerpo) = block(
+  fill: white,
+  stroke: 0.8pt + black,
+  radius: 4pt,
+  inset: 1em,
+  width: 100%,
+  cuerpo,
+)
+
 #let desarrollo(cuerpo) = block(
   stroke: 0.8pt + luma(80%),
   inset: (left: 0.75em, top: 0.6em, bottom: 0.6em, right: 0.75em),
@@ -224,7 +233,7 @@ $
 
     El baseline con el cual se compara la propuesta es el sr-index. Este índice resuelve el mismo problema pero de manera diferente. La implementación se puede encontrar en https://github.com/duscob/sr-index la cual fue hecha por Dustin Cobas.
 
-    == Contribución de la memoria
+    == Implementaciones
 
     + *Comprimir el DSA con RePair*, el algoritmo de compresión gramatical que reemplaza iterativamente los pares de símbolos más frecuentes de una secuencia por un nuevo no-terminal (se profundiza en la sección 2.7): Almacenar en cada no-terminal seis campos: longitud l(X), suma total d(X), mínimo de sumas parciales $m_min(X)$, posición del mínimo $p_min(X)$, máximo de sumas parciales $m_max(X)$, y posición del máximo $p_max(X).$
     + *Responder min(SA[sp..ep]) y max(SA[sp..ep]) en tiempo o(h)*: Siendo h la altura de la gramática, descendemos recursivamente combinando la metadata, sin necesidad de enumerar las ocurrencias.
@@ -1247,6 +1256,45 @@ El codigo se puede encontrar en * https://github.com/gitonina/DSA-Grammar *. El 
 El desarrollo de esta memoria tuvó uso de IA generativa. La asistencia con IA fue precisamente eso: asistencia para arreglar problemas de sintaxis con typst (editor de texto que se usó para la confección de este informe), equivalencias entre typst y latex (en un principio este informe fue hecho con latex, pero se decidió moverse a typst por conveniencia y por problemas con el compilador de latex), entendimiento de conceptos complejos en papers de la biliografia, arreglo de bugs en C++, bosquejos y borradores de codigos para estructuras, y finalmente ayuda para gramatica, ortografía y coherencia en la redacción de este informe. Las sugerencias de parte de la IA no fueron aceptadas inmediatamente, antes pasó por un proceso de testing y comprobación de que realmente servían y contribuían para esta memoria. 
 
 == Modelos usados 
+    - *Claude Opus 4.6*: Fue usado para entender conceptos complejos de los papers de la bibliografía. En un principio no se tenía los conocimientos en el ámbito de la bioinformática, y este modelo agilizó el apredizaje de estos. En particular, ayudó a profundizar las secciones 5.2 y 6.3 de jacm19, en donde se explica la gramática del DSA y la forma de calculas RMQs en una gramaticas similar a Repair, respectivamente. Los demás conceptos fueron revisados a la par con los papers de parte mía. Se usó también para hacer estructuras iniciales de la grámatica y como combinarlo con los archivos existentes previos y necesarios (FM-index, sr-index, Repair y archivos para construir SA). Por último, se usó para entender codigoa ajeno, esto porque daba una interpretación distinta a la mía y que podía ayudar a entender el modus operandi de la persona que programó cierto codigo. 
+#pagebreak()   
+    - *Claude Sonnet 4.5*: Este modelo fue usado para arreglar bugs que tuve con el compilador de latex. También, para traspasar lo que tenía en latex, moverlo a typst. Problemas de ortografía, redacción, gramatica y coherencia tambien fue visto con este modelo, todo con su respectiva supervisión. Es aquí donde más se usó, dado que ayudó mucho a tener personalización con typst. Un ejemplo de esto son los recuadros de definiciones, estructuras, algoritmo de consulta, entre otros que hay en este informe. La motivación de usarlo fue para que fuera todo mas legible y se viera mucho mejor en mi opinión, y esta herramienta agilizaba esta tarea puesto que no manejo typst al 100%.
+
+ 
+  La motivación de usar estas herramientas viene más que nada de acelerar los procesos mencionados anteriormente. Bajo ningún concepto fueron aceptadas las sugerencia de manera inmediata, sino mas bien, se siguió el siguiente flujo: 
+ 
+ + Entender los conceptos basicos, con ayuda y asistencia de IA. Hacer ejemplos para practicar y revisar las respuestas de la IA junto con la lectura. 
+  
+ + Habiendo entendido los conceptos, ya se tenía una idea mucho mas clara de lo que se tenía que hacer, dado que justamente en jacm19 se plasma muy clara la idea. 
+
+ + Se instalaron las cosas necesarias para el baseline (ropebwt3 y sr-index), junto con archivos adjuntos dados por mi profesor guia que eran los siguientes: constructor de suffix arrays (kkp.zip) y constructor de dataset sintetico para pruebas (makeData.c, mtwister.c y mtwister.h).
+
+ + Se usó IA para entender los repositorios y para entender la forma de instalar todo sin tener conflictos.
+
+ + A partir de áca, el uso de la IA fue para construir bosquejos y borradores para codigos como para el DSA y la estructura de la grámatica.
+  
+
+#pagebreak()
+== Ejemplos de prompts
+
+El flujo de uso de la IA siempre fue primero revisar detenidamente la información que tenía (papers), y a partir de aquí, decirle como me gustaría que lo hiciera, que siempre me de ejemplos y tambíen que demuestre que lo que hizo esta correcto (mediante tests).
+Ejemplos de esto se destacan a continuación: 
+
+- En base al paper sea24, estoy leyendo el ejemplo de la figura 2 del paper, se busca el read ACATA, aquí es donde no me queda claro el procedimiento. Primero quiero que me expliques todos los sufijos que hay en el texto y como los obtienes paso a paso, detallando los conceptos que necesiten ser explicados (sobre todo los que no han sido definidos). Una vez hecho esto, ordenalos lexicograficamente y explicame porque uno va primero que otro. Verifica que tus resultados sean ídenticos a los del paper y valida tu procedimiento y razonamiento.
+
+- En base a este texto, quiero que verifiques ortografía, gramática, coherencia y puntuación. Es muy importante tener también en cuenta el contexto, que a pesar de que no lo conozcas, considera siempre palabras fuera de lugar, y si este es el caso, recomiendame siempre mejores palabras para usar. En este texto en particular no es necesario ser tecnico, pero sí formal. 
+
+- Teniendo en cuenta la idea de crear metadata para cada nodo de la grámatica, quiero que me hagas un bosquejo de la estructura inicial de la metada, llamemole NodeMeta, y a partir de esta, crea las funciones basicas, osea, añadir regla, obtener metadatos, etc. Valida que tu recomendación sea útil y que sirva mediante tests. 
+
+- Dada la siguiente imagen (aquí adjunte una imagen de como me gustaría que se viera el formato de la definición de estructuras, ejemplos y algoritmos de este informe. Esto fue puramente estetico como se puede apreciar en el capitulo 4), quiero que me des un codigo en typst para que yo pueda usarlo y agregar mis cambios. No dejar lado que el fondo debe ser blanco y los bordes negros. 
+
+- Quiero escribir codigo en typst, por ejemplo, codigo c++ y que tenga formato parecido a markdown. Quiero que me des una estructura para que se me genere un recuadro con bordes y que dentro de este pueda escribir este codigo. Te doy un ejemplo: (aquí adjunté un ejemplo de C++ y alrededor un recuadro, donde los tipos, funciones y la sintaxis estaba explicito mediante colores).
+
+- En base a este repositorio, quiero que me expliques a grandes rasgos como funciona el sr-index, como se compila y ejecuta para así poder comparar resultados.
+
+
+#pagebreak()
+El último prompt fue uno de los que más se repitió, puesto que muchas herramientas no pude compilarlas bien  tuve que pedir ayuda incluso hasta enviando un correo en su momento a Dustin Cobas para que me explicara como usar su software de manera correcta. Los prompts que no funcionaron bien fueron aquellos donde no dí contexto de nada y solo dí una instrucción directa, por ejemplo, "dame los tests para verificar que esto esta bien". En particular, cuando quise cambiarme de latex a typst, le pedí muchas veces: "a partir de este extracto hecho en latex, escribeme lo mismo pero en typst", esto practicamente siempre me salía mal, y tuve que cambiarlo manualmente revisando la documentación de typst. Cuando note este patrón, fue cuando decidí cambiar mis prompts para esto y pedirle explicitamente que siempre revisara la documentación (hubo veces en las que me dió codigo obsoleto).
 ]
 #capitulo(title: "Conclusión")[
     == Conclusiones generales
@@ -1257,6 +1305,158 @@ El desarrollo de esta memoria tuvó uso de IA generativa. La asistencia con IA f
 
 #show: end-doc
 
-#apendice(title: "Anexo")[
-   
+#apendice(title: "Gramática")[
+  
+#codigo("cpp")[
+```cpp
+struct NodeMeta {
+    int64_t l;      // expansion length
+    int64_t d;      // sum of all values (= last prefix sum)
+    int64_t m_min;  // minimum prefix sum over positions 1..l
+    int64_t p_min;  // position of minimum (1-indexed, leftmost on tie)
+    int64_t m_max;  // maximum prefix sum over positions 1..l
+    int64_t p_max;  // position of maximum (1-indexed, leftmost on tie)
+};
+
+struct Rule {
+    int left, right;  // >=0: index into Grammar::rules; <0: terminal, value = terminals[-sym-1]
+    NodeMeta meta;
+};
+
+class Grammar {
+public:
+    std::vector<int64_t> terminals;
+    std::vector<Rule>    rules;
+
+ 
+    int add_terminal(int64_t v);
+
+    int add_rule(int left, int right);
+
+    
+    NodeMeta get_meta(int sym) const;
+
+    void expand(int sym, std::vector<int64_t>& out) const;
+};
+
+```
+]
+
+= RMQ y algoritmo
+
+#codigo("cpp")[
+  ```cpp
+
+  static int64_t descend_min(const Grammar& g, int sym, int64_t f, int64_t a, int64_t b) {
+    const NodeMeta m = g.get_meta(sym);
+    if (a == 1 && b == m.l) return f + m.m_min;
+    const Rule&    rule = g.rules[sym];
+    const NodeMeta ml   = g.get_meta(rule.left);
+    int64_t        l1   = ml.l;
+    if (b <= l1) return descend_min(g, rule.left,  f,  a,  b);
+    if (a >  l1) return descend_min(g, rule.right, f + ml.d, a - l1, b - l1);
+
+    int64_t r1 = descend_min(g, rule.left,  f,  a, l1);
+    int64_t r2 = descend_min(g, rule.right, f + ml.d, 1, b - l1);
+    return std::min(r1, r2);
+}
+
+class RangeQuery {
+public:
+    RangeQuery(const Grammar& g, const std::vector<int>& top_level);
+
+    int64_t range_min(int64_t sp, int64_t ep) const;
+    int64_t range_max(int64_t sp, int64_t ep) const;
+
+    int64_t total_length() const { return L.empty() ? 0 : L.back(); }
+
+    size_t size_in_bytes() const {
+        // rmq_succinct_sct almacena un bit_vector de 2K bits
+        size_t rmq_bits = rmq_min.sct_bp.size() + rmq_max.sct_bp.size();
+        return symbols.size() * sizeof(int)
+             + L.size()      * sizeof(int64_t)
+             + A.size()      * sizeof(int64_t)
+             + M_min.size()  * sizeof(int64_t)
+             + M_max.size()  * sizeof(int64_t)
+             + (rmq_bits + 7) / 8;
+    }
+
+
+
+
+RangeQuery::RangeQuery(const Grammar& g_ref, const std::vector<int>& top_level)
+    : g(&g_ref), symbols(top_level) {
+    int K = (int)top_level.size();
+    L.resize(K + 1, 0);
+    A.resize(K + 1, 0);
+    M_min.resize(K);
+    M_max.resize(K);
+    for (int i = 0; i < K; i++) {
+        NodeMeta m = g->get_meta(top_level[i]);
+        L[i + 1] = L[i] + m.l;
+        A[i + 1] = A[i] + m.d;
+        M_min[i] = A[i] + m.m_min;
+        M_max[i] = A[i] + m.m_max;
+    }
+    constexpr uint64_t SIGN = (uint64_t)1 << 63;
+    sdsl::int_vector<64> iv(K);
+    for (int i = 0; i < K; i++) iv[i] = (uint64_t)M_min[i] ^ SIGN;
+    rmq_min = sdsl::rmq_succinct_sct<true>(&iv);
+    for (int i = 0; i < K; i++) iv[i] = (uint64_t)M_max[i] ^ SIGN;
+    rmq_max = sdsl::rmq_succinct_sct<false>(&iv);
+}
+  ```
+]
+#pagebreak()
+= DSA
+
+#codigo("cpp")[
+```cpp
+void build_dsa(const std::string& text_path, const std::string& dsa_path) {
+    FILE* tf = fopen(text_path.c_str(), "rb");
+    if (!tf) throw std::runtime_error("build_dsa: cannot open " + text_path);
+
+    fseek(tf, 0, SEEK_END);
+    long n = ftell(tf);
+    fseek(tf, 0, SEEK_SET);
+    if (n <= 0) { fclose(tf); throw std::runtime_error("build_dsa: empty file " + text_path); }
+
+    unsigned char* text = new unsigned char[n];
+    if ((long)fread(text, 1, n, tf) != n) {
+        fclose(tf); delete[] text;
+        throw std::runtime_error("build_dsa: read error on " + text_path);
+    }
+    fclose(tf);
+
+    int* sa = new int[n];
+    if (divsufsort(text, sa, (int)n) != 0) {
+        delete[] text; delete[] sa;
+        throw std::runtime_error("build_dsa: divsufsort failed");
+    }
+    delete[] text;
+
+
+    unsigned* dsa = new unsigned[n];
+    dsa[0] = 2u * (unsigned)sa[0];
+    for (int i = 1; i < (int)n; i++) {
+        int d = sa[i] - sa[i - 1];
+        dsa[i] = (d >= 0) ? (unsigned)(2 * d) : (unsigned)(-2 * d - 1);
+    }
+    delete[] sa;
+
+    FILE* of = fopen(dsa_path.c_str(), "wb");
+    if (!of) {
+        delete[] dsa;
+        throw std::runtime_error("build_dsa: cannot create " + dsa_path);
+    }
+    if ((long)fwrite(dsa, sizeof(unsigned), n, of) != n) {
+        fclose(of); delete[] dsa;
+        throw std::runtime_error("build_dsa: write error on " + dsa_path);
+    }
+    fclose(of);
+    delete[] dsa;
+}
+
+ ```
+]
 ]
