@@ -169,6 +169,16 @@
     pagebreak(weak: true)
 }
 
+
+#let declaracion(doc) = {
+    show heading: it => {set text(size: 24pt, hyphenate: false); align(center, it)}
+    v(85pt)
+    heading("Declaración de Uso de Inteligencia Artificial", numbering: none, outlined: false)
+    v(45pt)
+    doc
+    pagebreak(weak: true)
+}
+
 #let agradecimientos(doc) = {
     frontmatter-section(title: "Agradecimientos", doc)
 }
