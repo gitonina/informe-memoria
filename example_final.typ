@@ -1210,6 +1210,12 @@ El código se puede encontrar en * https://github.com/gitonina/DSA-Grammar *. El
 
    - $s=16$: la mitad de muestras, por lo que ocupa menos espacio pero Locate() es más lento.
 
+*Observaciones importantes*: 
+
++ Antes de hacer el calculo de tiempos y espacio, se procuró que sr-index y dsa index dieran exactamente los mismos resultados, es decir, min(SA[sp..ep]) y max(SA[sp..ep]) para todos los datasets bajo el mismo intervalor
+
++ Para los datasets einstein y worldleaders, los archivos originales contienen saltos de línea que el sr-index indexa como caracteres. Para garantizar que los patrones sean substrings válidos, se crearonvesiones linealizadas, eliminando todos los $backslash$n antes de construir el índice y extraer los patrones.
+
 #pagebreak()
   == Resultados
   === Trade-off espacio-tiempo global
@@ -1225,6 +1231,7 @@ El código se puede encontrar en * https://github.com/gitonina/DSA-Grammar *. El
 ) <fig:tradeoff2>
 
 #pagebreak()
+
   === Tiempo vs número de ocurrencias
    #figure(
   image("imagenes/grafico2_tiempo_vs_ocurrencias.png", width: 100%),
@@ -1234,9 +1241,79 @@ El código se puede encontrar en * https://github.com/gitonina/DSA-Grammar *. El
 #pagebreak()
   === Desglose de espacio
      #figure(
-  image("imagenes/grafico3_desglose_espacio.png", width: 100%),
+  image("imagenes/space_breakdown_int32_linear.png", width: 100%),
   caption: [Desglose de espacio por dataset],
 ) <fig:desglose_espacio>
+
+#figure(
+  table(
+    columns: 6,
+    align: center,
+    table.hline(),
+    [*Dataset*], [*Tamaño*], [*Queries*], [*Baseline (µs)*], [*DSA index (µs)*], [*Speedup*],
+    table.hline(),
+    [`synth`],        [100 MB], [2890], [89.5],  [1.62], [*55.2×*],
+    [`influenza`],    [148 MB], [1000], [207.7], [3.92], [*53.0×*],
+    [`ecoli`],        [108 MB], [1000], [89.9],  [2.31], [*38.9×*],
+    [`einstein`],     [446 MB], [999],  [521.3], [2.19], [*238.0×*],
+    [`worldleaders`], [45 MB],  [1000], [403.0], [2.73], [*147.6×*],
+    table.hline(),
+  ),
+  caption: [Tiempo promedio por query],
+) <tab:tiempopromediopquery>
+
+#figure(
+  table(
+    columns: 5,
+    align: center,
+    table.hline(),
+    [*Dataset*], [*n*], [*DSA bps*], [*Sr-index s=8 bps*], [*Sr-index s=16 bps*],
+    table.hline(),
+    [synth],        [100,000,000], [4.40],  [0.43], [0.37],
+    [influenza],    [154,808,555], [10.01], [1.18], [1.05],
+    [ecoli],        [112,689,515], [47.31], [3.88], [2.97],
+    [einstein],     [465,246,913], [0.26],  [0.04], [0.03],
+    [worldleaders], [46,865,141],  [5.66],  [0.69], [0.59],
+    table.hline(),
+  ),
+  caption: [Espacio DSA index y sr-index],
+) <tab:espaciobps>
+
+#figure(
+  table(
+    columns: 5,
+    align: center,
+    table.hline(),
+    [*Dataset*], [*Gramática*], [*Arrays top-level*], [*RMQ sucinta*], [*Total*],
+    table.hline(),
+    [`synth`],        [32.1 MB],  [22.5 MB],  [0.6 MB],  [55.1 MB],
+    [`influenza`],    [145.5 MB], [47.1 MB],  [1.2 MB],  [193.8 MB],
+    [`ecoli`],        [230.2 MB], [425.6 MB], [10.6 MB], [666.5 MB],
+    [`einstein`],     [9.7 MB],   [5.8 MB],   [0.1 MB],  [15.7 MB],
+    [`worldleaders`], [20.6 MB],  [12.3 MB],  [0.3 MB],  [33.2 MB],
+    table.hline(),
+  ),
+  caption: [Desglose del espacio del DSA index],
+) <tab:desglose>
+
+== Intepretaciones
+
+=== Tiempo
++ El grammar index es 39-261 $times$ más rapido que sr-index con s=8, y se mantiene en un ran angosto de 1.6-3.9 $mu$s sin importar el tamaño del dataset ni el número de ocurrencias por query
+
++ El speedup crece con la repetitividad del intervalo, no con el tamaño del dataset: ecoli (6.9 ocurrencias/query en promedio) tiene el speedup más bajo (39.7$times$ ) porque el baseline apenas tiene trabajo que hacer — el costo fijo del grammar domina la comparación. einstein (2,659 ocurrencias/query en promedio, máximo 37,582) tiene el speedup más alto (260.7$times$ ) porque el baseline enumera miles de ocurrencias con Locate() mientras el grammar responde en tiempo constante.
+
++ Esto confirma el comportamiento esperado: tiempo_grammar ≈ O(log n) independiente de k (ocurrencias), tiempo_sr-index ≈ O(k·s) lineal en k. El grammar index gana más cuanto más repetitivo es el intervalo consultado.
+
+=== Espacio
+
++ El sr-index sigue siendo, por un margen amplio, la estructura más compacta: usa espacio O(r) (runs del BWT). El dsa index usa espacio proporcional al tamaño de la gramática RePair, que solo captura repetitividad estructural (substrings exactos largos) — por eso en ecoli (cepas genéticamente diversas, poca repetición exacta) el dsa index ocupa 47.3 bps contra apenas 3.9 bps del sr-index s=8 (12.2$times$).
+
++ Aumentar el sampling de s=8 a s=16 en el sr-index reduce su espacio un 11–24% adicional, lo que agranda la brecha con el dsa index a 8.1–16.0$times$ (vs 6.9–12.2$times$ contra s=8).
+
+=== Tradeoff espacio-tiempo
+
+El dsa index cambia espacio por tiempo de forma consistente en los 5 datasets: paga entre 6.9$times$ y 16.0$times$ más espacio que el sr-index (según dataset y sampling) para eliminar por completo la dependencia del tiempo de query con el número de ocurrencias, logrando speedups de 39.7×–260.7×. Ese tradeoff es más favorable al grammar cuanto más repetitivo es el patrón de acceso (einstein, worldleaders) y menos favorable cuando las queries tienen pocas ocurrencias (ecoli), donde ni el tiempo ni el espacio lo favorecen tanto.
 ]
 
 #capitulo(title: "Uso de inteligencia artificial")[
@@ -1284,10 +1361,35 @@ Ejemplos de esto se destacan a continuación:
 El último prompt fue uno de los que más se repitió, puesto que muchas herramientas no pude compilarlas bien, por lo que tuve que pedir ayuda incluso hasta enviando un correo en su momento a Dustin Cobas para que me explicara cómo usar su software de manera correcta. Los prompts que no funcionaron bien fueron aquellos donde no di contexto de nada y solo di una instrucción directa, por ejemplo, "dame los tests para verificar que esto está bien". En particular, cuando quise cambiarme de LaTeX a Typst, le pedí muchas veces: "a partir de este extracto hecho en LaTeX, escríbeme lo mismo pero en Typst", esto prácticamente siempre me salía mal, y tuve que cambiarlo manualmente revisando la documentación de Typst. Cuando noté este patrón, fue cuando decidí cambiar mis prompts para esto y pedirle explícitamente que siempre revisara la documentación (hubo veces en las que me dio código obsoleto).
 ]
 #capitulo(title: "Conclusión")[
-    == Conclusiones generales
+   En este apartado se revisa el cumplimiento de los objetivos planteados al iniciar este trabajo. También, se hace una reflexión general y las posibles mejoras futuras que se le pueden aplicar. 
+    == Objetivos
+    
+   
     === Objetivo general
-    == Objetivos especificos
+    El objetivo general fue diseñar, implementar y evaluar un índice comprimido basado en gramáticas sobre el arreglo diferencial de sufijos , capaz de responder consultas fundamentales de tipo RMQ
+    de manera eficiente en colecciones genómicas altamente repetitivas, con el fin de mejorar la detección de ocurrencias relevantes de secuencias y apoyar la identificación del nodo ancestral
+    de aparición de genes en árboles filogenético. Este objetivo se cumplió, dado que este índice responde eficientemente en tiempos mucho menores que su comparación que es el sr-index a costo de aumentar el espacio entre 7 y 16 veces dependiendo de la repetitividad del dataset. 
+    === Objetivos especificos
+
+  _OE1 (Revisar el estado del arte en índices comprimidos para colecciones repetitivas)_: Antes de empezar con el trabajo propiamente tal, se revisó todo el material disponible para de esta manera entender mejor lo que se requería. 
+
+  _OE2 (Definir formalmente la estructura de datos propuesta sobre el DSA)_: Se definió los metadatos necesarios para el DSA .
+
+  _OE3 (Implementar un prototipo funcional del índice DSA-gramática)_: Se implementó la estructura del DSA, su compresión (gracias a una implementación para enteros balanceados del profesor Gonzalo) y las operaciones de consulta requeridas.
+
+  _OE4 (Integrar el índice en el pipeline de detección de MEMs)_: En efecto, teniendo instalado el baseline, el dsa index se integra al pipeline calculando min(SA[sp..ep]) y max(SA[sp..ep]).
+
+  _OE5 (Evaluar experimentalmente el rendimiento del índice)_: Lo primero que se hizo fue comparar los resultados con el sr-index, en el sentido de correctitud. Habiendo pasado esta primera fase, se procedió a evaluar tiempo y espacio, y se llegó a las conclusiones de la sección de experimentación.
+
+  _OE6 (Analizar los resultados)_: Se evaluó en qué grado se mejora la eficiencia espacio/tiempo respecto al sr-index
+    == Reflexión
+
+    El trabajo de esta memoria fue muy desafiante y de ensayo y error. En un principio se empezó por hacer funcionar el baseline, con el cual, tuve muchos problemas con que me funcionara, no por un problema del baseline en sí, sino que un tema mío de no poder entender como hacerlo. Gracias a la ayuda de Dustin, pude entender de mejor manera como hacer funcionar el sr-index, y de aquí en adelante, la verdad todo resultó mucho más sencillo no así sin complicaciones. 
+
+    Habiendo terminado la primera versión de la implementación, gracias al _feedback_ del profesor pude identicar mejoras para el espacio del índice: usar simplemente la implementación de la libreria de sdsl para la estructura RMQ sucinta, y cambiar los tipos de para los metadatos de 64 bits a 32 bits. Este cambio significó una mejora increible con respecto a como estaba en un principio. 
     == Trabajo futuro
+
+    El profesor Gonzalo sugirió, para poder optimizar el espacio, lo siguiente: guardar los nodos de la gramática en un array nodes[] en orden DFS, haciendo que el hijo izquierdo de nodes[i] siempre esté en nodes[i+1], lo que significaría almacenar solo el hijo derecho. El problema con esto es que la implementación actual de para la compresión Repair (la que se usa en esta memoria) usa un DAG y no un árbol, haciendo que en realidad no se gane nada guardando los nodos en el array. Hay una forma de guardarlos en la mitad de espacio, y este podría ser una dirección para el trabajo futuro. 
 ]
 
 #show: end-doc
@@ -1297,32 +1399,33 @@ El último prompt fue uno de los que más se repitió, puesto que muchas herrami
 #codigo("cpp")[
 ```cpp
 struct NodeMeta {
-    int64_t l;      // expansion length
-    int64_t d;      // sum of all values (= last prefix sum)
-    int64_t m_min;  // minimum prefix sum over positions 1..l
-    int64_t p_min;  // position of minimum (1-indexed, leftmost on tie)
-    int64_t m_max;  // maximum prefix sum over positions 1..l
-    int64_t p_max;  // position of maximum (1-indexed, leftmost on tie)
+    int32_t l;      // expansion length
+    int32_t d;      // sum of all values (= last prefix sum)
+    int32_t m_min;  // minimum prefix sum over positions 1..l
+    int32_t p_min;  // position of minimum (1-indexed, leftmost on tie)
+    int32_t m_max;  // maximum prefix sum over positions 1..l
+    int32_t p_max;  // position of maximum (1-indexed, leftmost on tie)
 };
 
+NodeMeta terminal_meta(int32_t v);
+
+NodeMeta combine(const NodeMeta& y1, const NodeMeta& y2);
+
 struct Rule {
-    int left, right;  // >=0: index into Grammar::rules; <0: terminal, value = terminals[-sym-1]
+    int left, right; 
     NodeMeta meta;
 };
 
 class Grammar {
 public:
-    std::vector<int64_t> terminals;
+    std::vector<int32_t> terminals;
     std::vector<Rule>    rules;
 
- 
-    int add_terminal(int64_t v);
+
+    int add_terminal(int32_t v);
 
     int add_rule(int left, int right);
-
-    
     NodeMeta get_meta(int sym) const;
-
     void expand(int sym, std::vector<int64_t>& out) const;
 };
 
